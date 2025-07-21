@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Estação Meteorológica - BitDogLab</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background-color: #f0f4f8;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1, h2, h3 {
+            text-align: center;
+            color: #1e3a5f;
+        }
+
+        .card {
+            background: #fff;
+            padding: 25px;
+            margin: 20px auto;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            max-width: 800px;
+        }
+
+        .current-data {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            text-align: center;
+            gap: 20px;
+        }
+
+        .data-point {
+            flex-grow: 1;
+            min-width: 150px;
+        }
+
+        .data-point .label {
+            font-size: 1.2em;
+            color: #555;
+            margin-bottom: 8px;
+        }
+
+        .data-point .valor {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #0056b3;
+        }
+
+        .status-card {
+            font-size: 1.1em;
+            text-align: center;
+        }
+
+        .status-card #estadoAlerta.normal { color: #28a745; }
+        .status-card #estadoAlerta.alerta { color: #dc3545; font-weight: bold; }
+        
+        .graphs-container {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 30px;
+        }
+
+        canvas {
+            max-width: 100%;
+            height: auto;
+            margin-top: 15px;
+        }
+
+        .config-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        
+        .config-table th, .config-table td {
+            padding: 12px;
+            border: 1px solid #ddd;
+            text-align: center;
+        }
+
+        .config-table th {
+            background-color: #e9ecef;
+        }
+
+        input[type='number'] {
+            font-size: 16px;
+            padding: 8px;
+            width: 100px;
+            text-align: center;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+
+        button {
+            font-size: 18px;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 8px;
+            background: #007bff;
+            color: white;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+            transition: background 0.3s ease;
+            cursor: pointer;
+            margin-top: 25px;
+            width: 100%;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <h1>Estação Meteorológica</h1>
+
+    <div class="card">
+        <h2>Condições Atuais</h2>
+        <div class="current-data">
+            <div class="data-point">
+                <div class="label">Temperatura</div>
+                <div id="tempValor" class="valor">-- °C</div>
+            </div>
+            <div class="data-point">
+                <div class="label">Umidade</div>
+                <div id="umidadeValor" class="valor">-- %</div>
+            </div>
+            <div class="data-point">
+                <div class="label">Pressão</div>
+                <div id="pressaoValor" class="valor">-- hPa</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card status-card">
+        <p><strong>Estado do Sistema:</strong> <span id="estadoAlerta" class="normal">Normal</span></p>
+        <p><small>Última atualização: <span id="timestamp">--</span></small></p>
+    </div>
+
+    <div class="card">
+        <h2>Histórico de Dados</h2>
+        <div class="graphs-container">
+            <div>
+                <h3>Temperatura (°C)</h3>
+                <canvas id="graficoTemperatura"></canvas>
+            </div>
+            <div>
+                <h3>Umidade Relativa (%)</h3>
+                <canvas id="graficoUmidade"></canvas>
+            </div>
+            <div>
+                <h3>Pressão Atmosférica (hPa)</h3>
+                <canvas id="graficoPressao"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Configurações</h2>
+        <form id="configForm" onsubmit="salvarConfiguracao(event)">
+            <h3>Limites de Alerta</h3>
+            <table class="config-table">
+                <tr>
+                    <th>Parâmetro</th>
+                    <th>Mínimo</th>
+                    <th>Máximo</th>
+                </tr>
+                <tr>
+                    <td>Temperatura (°C)</td>
+                    <td><input type="number" id="inputTempMin" step="0.1" required></td>
+                    <td><input type="number" id="inputTempMax" step="0.1" required></td>
+                </tr>
+                <tr>
+                    <td>Umidade (%)</td>
+                    <td><input type="number" id="inputUmidMin" step="1" required></td>
+                    <td><input type="number" id="inputUmidMax" step="1" required></td>
+                </tr>
+                <tr>
+                    <td>Pressão (hPa)</td>
+                    <td><input type="number" id="inputPresMin" step="1" required></td>
+                    <td><input type="number" id="inputPresMax" step="1" required></td>
+                </tr>
+            </table>
+
+            <h3 style="margin-top: 30px;">Calibração (Offsets)</h3>
+            <table class="config-table">
+                 <tr>
+                    <th>Parâmetro</th>
+                    <th>Offset de Ajuste</th>
+                </tr>
+                <tr>
+                    <td>Temperatura</td>
+                    <td><input type="number" id="inputTempOffset" step="0.1" required></td>
+                </tr>
+                 <tr>
+                    <td>Umidade</td>
+                    <td><input type="number" id="inputUmidOffset" step="0.1" required></td>
+                </tr>
+                 <tr>
+                    <td>Pressão</td>
+                    <td><input type="number" id="inputPresOffset" step="0.1" required></td>
+                </tr>
+            </table>
+            
+            <button type="submit">Salvar Configurações</button>
+        </form>
+    </div>
+
+    <script>
+        let graficos = {}; // Objeto para armazenar as instâncias dos gráficos
+
+        // Função auxiliar para criar um gráfico
+        function criarGrafico(canvasId, label, color) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            return new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: label,
+                        data: [],
+                        backgroundColor: color.bg,
+                        borderColor: color.border,
+                        borderWidth: 2,
+                        tension: 0.3,
+                        fill: true
+                    }]
+                },
+                options: { responsive: true, scales: { y: { beginAtZero: false } } }
+            });
+        }
+
+        function inicializarGraficos() {
+            graficos.temperatura = criarGrafico('graficoTemperatura', 'Temperatura (°C)', { bg: 'rgba(255, 99, 132, 0.2)', border: 'rgba(255, 99, 132, 1)' });
+            graficos.umidade = criarGrafico('graficoUmidade', 'Umidade (%)', { bg: 'rgba(54, 162, 235, 0.2)', border: 'rgba(54, 162, 235, 1)' });
+            graficos.pressao = criarGrafico('graficoPressao', 'Pressão (hPa)', { bg: 'rgba(75, 192, 192, 0.2)', border: 'rgba(75, 192, 192, 1)' });
+        }
+
+        // Função para buscar e atualizar todos os dados da página
+        function atualizarDados() {
+            fetch('/data') // Endpoint que o seu servidor na BitDogLab deve fornecer
+                .then(res => res.json())
+                .then(data => {
+                    // Atualiza os valores atuais
+                    document.getElementById('tempValor').innerText = `${data.temperatura.toFixed(1)} °C`;
+                    document.getElementById('umidadeValor').innerText = `${data.umidade.toFixed(1)} %`;
+                    document.getElementById('pressaoValor').innerText = `${data.pressao.toFixed(1)} hPa`;
+                    
+                    // Atualiza o status do sistema
+                    const alertaEl = document.getElementById('estadoAlerta');
+                    alertaEl.innerText = data.status_alerta;
+                    alertaEl.className = data.status_alerta.toLowerCase() === 'normal' ? 'normal' : 'alerta';
+                    
+                    document.getElementById('timestamp').innerText = new Date().toLocaleTimeString('pt-BR');
+
+                    // Atualiza os gráficos com o histórico
+                    if (graficos.temperatura && data.historico) {
+                        const maxDataPoints = 30; // Limita a quantidade de pontos no gráfico
+                        const labels = Array.from({length: data.historico.temperatura.length}, (_, i) => i + 1);
+
+                        graficos.temperatura.data.labels = labels;
+                        graficos.temperatura.data.datasets[0].data = data.historico.temperatura;
+                        graficos.temperatura.update('none');
+                        
+                        graficos.umidade.data.labels = labels;
+                        graficos.umidade.data.datasets[0].data = data.historico.umidade;
+                        graficos.umidade.update('none');
+
+                        graficos.pressao.data.labels = labels;
+                        graficos.pressao.data.datasets[0].data = data.historico.pressao;
+                        graficos.pressao.update('none');
+                    }
+
+                    // Preenche o formulário com as configurações atuais
+                    if (data.config) {
+                        document.getElementById('inputTempMin').value = data.config.limites.temp_min;
+                        document.getElementById('inputTempMax').value = data.config.limites.temp_max;
+                        document.getElementById('inputUmidMin').value = data.config.limites.umid_min;
+                        document.getElementById('inputUmidMax').value = data.config.limites.umid_max;
+                        document.getElementById('inputPresMin').value = data.config.limites.pres_min;
+                        document.getElementById('inputPresMax').value = data.config.limites.pres_max;
+
+                        document.getElementById('inputTempOffset').value = data.config.offsets.temp;
+                        document.getElementById('inputUmidOffset').value = data.config.offsets.umid;
+                        document.getElementById('inputPresOffset').value = data.config.offsets.pres;
+                    }
+                })
+                .catch(error => console.error('Erro ao buscar dados:', error));
+        }
+
+        function salvarConfiguracao(event) {
+            event.preventDefault();
+
+            // Coleta os dados do formulário
+            const configData = {
+                limites: {
+                    temp_min: Number(document.getElementById('inputTempMin').value),
+                    temp_max: Number(document.getElementById('inputTempMax').value),
+                    umid_min: Number(document.getElementById('inputUmidMin').value),
+                    umid_max: Number(document.getElementById('inputUmidMax').value),
+                    pres_min: Number(document.getElementById('inputPresMin').value),
+                    pres_max: Number(document.getElementById('inputPresMax').value)
+                },
+                offsets: {
+                    temp: Number(document.getElementById('inputTempOffset').value),
+                    umid: Number(document.getElementById('inputUmidOffset').value),
+                    pres: Number(document.getElementById('inputPresOffset').value)
+                }
+            };
+            
+            // Envia os dados para o servidor
+            fetch('/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(configData)
+            })
+            .then(response => {
+                if (response.ok) {
+                    alert('Configurações salvas com sucesso!');
+                    setTimeout(atualizarDados, 500); // Atualiza os dados após salvar
+                } else {
+                    alert('Erro ao salvar as configurações.');
+                }
+            })
+            .catch(error => console.error('Erro na requisição de salvar:', error));
+        }
+
+        // Inicializa a página
+        document.addEventListener('DOMContentLoaded', () => {
+            inicializarGraficos();
+            atualizarDados();
+            setInterval(atualizarDados, 5000); // Atualiza os dados a cada 5 segundos
+        });
+    </script>
+</body>
+</html>

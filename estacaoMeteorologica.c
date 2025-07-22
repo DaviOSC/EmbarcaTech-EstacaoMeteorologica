@@ -34,7 +34,7 @@ enum MODE
     CONNECTINGMODE,
     NORMALMODE,
     CONFIGMODE,
-    ALERTMODE
+    INFOMODE
 };
 volatile enum MODE current_mode = CONNECTINGMODE;
 volatile uint32_t last_time_button_A = 0;
@@ -206,7 +206,7 @@ void vDisplayTask(void *pvParameters)
             ssd1306_draw_string(&ssd, "Aguarde", 35, 35);
             break;
         }
-        case ALERTMODE:
+        case INFOMODE:
         {
             config_timer++;
             if (config_timer >= PAGE_DISPLAY_TIME)
@@ -341,7 +341,7 @@ void vLedTask(void *pvParameters)
             gpio_put(LED_RED, true);
         }
         else
-        { // ALERTMODE
+        { // INFOMODE
             gpio_put(LED_BLUE, false);
             gpio_put(LED_GREEN, false);
             gpio_put(LED_RED, true); // Vermelho para alerta
@@ -364,7 +364,7 @@ void gpio_irq_handler(uint gpio, uint32_t events)
             }
             else if (current_mode == NORMALMODE)
             {
-                current_mode = ALERTMODE;
+                current_mode = INFOMODE;
             }
             else
             {

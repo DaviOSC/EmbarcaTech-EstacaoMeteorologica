@@ -14,7 +14,6 @@
 #include "task.h"
 #include "semphr.h"
 #include "pico/bootrom.h"
-#include "config.h"
 #include "pio_matrix.pio.h"
 
 SemaphoreHandle_t xSensorDataMutex, xBuzzerSemaphore;
@@ -29,14 +28,16 @@ float pres_min_global = 980.0, pres_max_global = 1020.0, pres_offset_global = 0.
 
 volatile bool g_alerta_ativo = false;
 
+// Estados do display
 enum MODE
 {
     CONNECTINGMODE,
     NORMALMODE,
-    CONFIGMODE,
-    INFOMODE
+    INFOMODE,
+    CONFIGMODE
 };
-volatile enum MODE current_mode = CONNECTINGMODE;
+
+volatile enum MODE current_mode = CONNECTINGMODE; 
 volatile uint32_t last_time_button_A = 0;
 
 double calculate_altitude(double pressure)
@@ -55,7 +56,7 @@ void vWebServerTask(void *pvParameters)
         printf("Falha ao iniciar servidor TCP\n");
         vTaskDelete(NULL);
     }
-    current_mode = CONFIGMODE;
+    current_mode = INFOMODE;
     while (true)
     {
         cyw43_arch_poll();
@@ -65,6 +66,7 @@ void vWebServerTask(void *pvParameters)
 
 void vSensorTask(void *pvParameters)
 {
+    //inicialização e leitura dos valores dos sensores
     aht20_init(I2C_PORT_SENSORS);
     struct bmp280_calib_param bmp_params;
     bmp280_init(I2C_PORT_SENSORS);
@@ -88,6 +90,7 @@ void vSensorTask(void *pvParameters)
             pressao_global = press_bmp_conv / 100.0 + pres_offset_global;
             altitude_global = calculate_altitude(pressao_global * 100.0);
 
+            // Verificação se os valores estão dentro dos limites
             if (temperatura_aht_global < temp_min_global || temperatura_aht_global > temp_max_global ||
                 umidade_global < umid_min_global || umidade_global > umid_max_global ||
                 pressao_global < pres_min_global || pressao_global > pres_max_global)
@@ -99,6 +102,7 @@ void vSensorTask(void *pvParameters)
                 g_alerta_ativo = false;
             }
 
+            //adiciona as leituras no hisorico pra os gráficos
             for (int i = 0; i < MAX_READINGS - 1; i++)
             {
                 historico_temp_global[i] = historico_temp_global[i + 1];
@@ -162,6 +166,7 @@ void vDisplayTask(void *pvParameters)
         ssd1306_fill(&ssd, !cor);
         ssd1306_rect(&ssd, 2, 2, 124, 60, cor, !cor);
 
+        // Telas distintas mostrando as diferentes informações do sistema
         switch (current_mode)
         {
         case NORMALMODE:
@@ -206,8 +211,9 @@ void vDisplayTask(void *pvParameters)
             ssd1306_draw_string(&ssd, "Aguarde", 35, 35);
             break;
         }
-        case INFOMODE:
+        case CONFIGMODE:
         {
+            //sistema com temporizador pra modficar a informação mostrada na tela automaticamente
             config_timer++;
             if (config_timer >= PAGE_DISPLAY_TIME)
             {
@@ -251,7 +257,7 @@ void vDisplayTask(void *pvParameters)
             ssd1306_draw_string(&ssd, l_offset, 10, 52);
             break;
         }
-        case CONFIGMODE:
+        case INFOMODE:
         {
             char l2[24], l3[24], l4[24];
             int32_t rssi = 0;
@@ -259,7 +265,7 @@ void vDisplayTask(void *pvParameters)
             snprintf(l2, sizeof(l2), ipaddr_ntoa(netif_ip4_addr(netif_default)));
             snprintf(l3, sizeof(l3), "Sinal: %d dBm", rssi);
             snprintf(l4, sizeof(l4), "Rede: %s", WIFI_SSID);
-            ssd1306_draw_string(&ssd, "Status Wi-Fi", 25, 5);
+            ssd1306_draw_string(&ssd, "Status Wi-Fi", 20, 5);
             ssd1306_line(&ssd, 3, 15, 125, 15, cor);
             ssd1306_draw_string(&ssd, "IP:", 8, 18);
             ssd1306_draw_string(&ssd, l2, 8, 28);
@@ -275,7 +281,6 @@ void vDisplayTask(void *pvParameters)
 
 void vButtonBuzzerTask(void *pvParameters)
 {
-    // Usa o pino A
     pwm_init_buzzer(BUZZER_PIN_A);
 
     while (true)
@@ -283,7 +288,6 @@ void vButtonBuzzerTask(void *pvParameters)
         // Espera pelo semáforo (liberado pelo botão)
         if (xSemaphoreTake(xBuzzerSemaphore, portMAX_DELAY) == pdTRUE)
         {
-            // Toca um beep curto no pino A
             beep(BUZZER_PIN_A, 100);
         }
     }
@@ -334,19 +338,19 @@ void vLedTask(void *pvParameters)
             gpio_put(LED_GREEN, true); // Verde para normal
             gpio_put(LED_RED, false);
         }
-        else if (current_mode == CONFIGMODE)
+        else if (current_mode == INFOMODE)
         {
             gpio_put(LED_BLUE, false);
-            gpio_put(LED_GREEN, true); // Amarelo (Vermelho + Verde) para config
-            gpio_put(LED_RED, true);
+            gpio_put(LED_GREEN, true); // Amarelo (Vermelho + Verde) 
+            gpio_put(LED_RED, true); // para info
         }
         else
-        { // INFOMODE
+        { // CONFIGMODE
             gpio_put(LED_BLUE, false);
             gpio_put(LED_GREEN, false);
-            gpio_put(LED_RED, true); // Vermelho para alerta
+            gpio_put(LED_RED, true); // Vermelho para config
         }
-        vTaskDelay(pdMS_TO_TICKS(100)); // Delay pequeno para resposta rápida
+        vTaskDelay(pdMS_TO_TICKS(100)); 
     }
 }
 
@@ -358,19 +362,20 @@ void gpio_irq_handler(uint gpio, uint32_t events)
         last_time_button_A = now;
         if (current_mode != CONNECTINGMODE)
         {
-            if (current_mode == CONFIGMODE)
+            if (current_mode == INFOMODE)
             {
                 current_mode = NORMALMODE;
             }
             else if (current_mode == NORMALMODE)
             {
-                current_mode = INFOMODE;
+                current_mode = CONFIGMODE;
             }
             else
             {
-                current_mode = CONFIGMODE;
+                current_mode = INFOMODE;
             }
         }
+        // Acorda a tarefa do buzzer e, se ela for mais importante, a executa agora.
         BaseType_t xHigherPriorityTaskWoken = pdFALSE;
         xSemaphoreGiveFromISR(xBuzzerSemaphore, &xHigherPriorityTaskWoken);
         portYIELD_FROM_ISR(xHigherPriorityTaskWoken);

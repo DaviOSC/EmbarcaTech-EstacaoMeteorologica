@@ -2,22 +2,22 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "semphr.h"
-#include "html.h"
+#include "config.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h> 
 
-#define MAX_READINGS 20
+#define MAX_READINGS 30 // Numero de leituras para os gráficos
 #define JSON_BUFFER_SIZE 2048
 
 
-extern SemaphoreHandle_t xSensorDataMutex;
+extern SemaphoreHandle_t xSensorDataMutex;// semaforo de leitura de dados
+
 extern float temperatura_aht_global, temperatura_bmp_global, umidade_global, pressao_global, altitude_global;
 extern float historico_temp_global[], historico_umid_global[], historico_press_global[];
 extern float temp_min_global, temp_max_global, umid_min_global, umid_max_global, pres_min_global, pres_max_global;
 extern float temp_offset_global, umid_offset_global, pres_offset_global;
 
-// --- Protótipos de Funções Locais ---
 static err_t tcp_server_accept(void *arg, struct tcp_pcb *newpcb, err_t err);
 static err_t tcp_server_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
 void user_request(char *request_ptr, struct tcp_pcb *tpcb);
@@ -74,7 +74,7 @@ static void handle_root(struct tcp_pcb *tpcb)
     char http_header[] = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n";
     tcp_write(tpcb, http_header, sizeof(http_header) - 1, TCP_WRITE_FLAG_COPY);
 
-    tcp_write(tpcb, HTML_BODY2, strlen(HTML_BODY2), TCP_WRITE_FLAG_COPY);
+    tcp_write(tpcb, HTML_BODY, strlen(HTML_BODY), TCP_WRITE_FLAG_COPY);
 
 }
 
@@ -131,11 +131,6 @@ static void handle_config(struct tcp_pcb *tpcb, char *json_body)
 
     float t_min, t_max, h_min, h_max, p_min, p_max;
     float t_off, h_off, p_off;
-
-    printf("\n--- INICIO DO JSON RECEBIDO PELO SERVIDOR ---\n");
-    printf("%s", json_body);
-    printf("\n--- FIM DO JSON RECEBIDO PELO SERVIDOR ---\n\n");
-
     // Busca os objetos limites e offsets
     char *limites = strstr(json_body, "\"limites\"");
     char *offsets = strstr(json_body, "\"offsets\"");
@@ -161,13 +156,13 @@ static void handle_config(struct tcp_pcb *tpcb, char *json_body)
 
     if (success && xSemaphoreTake(xSensorDataMutex, pdMS_TO_TICKS(1000)) == pdTRUE)
     {
-        if (t_min >= t_max || h_min >= h_max || p_min >= p_max) {
-                printf("Erro: Minimo deve ser menor que Maximo!\n");
-                char http_response[] = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n\r\nMinimo deve ser menor que Maximo!";
-                tcp_write(tpcb, http_response, sizeof(http_response) - 1, TCP_WRITE_FLAG_COPY);
-                xSemaphoreGive(xSensorDataMutex);
-                return;
-            }
+        if (t_min >= t_max || h_min >= h_max || p_min >= p_max) // Verificação dos limites minimos serem menores que os máximos
+        {
+            char http_response[] = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n\r\nMinimo deve ser menor que Maximo!";
+            tcp_write(tpcb, http_response, sizeof(http_response) - 1, TCP_WRITE_FLAG_COPY);
+            xSemaphoreGive(xSensorDataMutex);
+            return;
+        }
         
         temp_min_global = t_min;
         temp_max_global = t_max;
@@ -181,23 +176,12 @@ static void handle_config(struct tcp_pcb *tpcb, char *json_body)
 
         xSemaphoreGive(xSensorDataMutex);
 
-        printf("\n--- NOVAS CONFIGURACOES SALVAS ---\n");
-        printf("Limites de Alerta:\n");
-        printf("  Temperatura: Min=%.1f C, Max=%.1f C\n", temp_min_global, temp_max_global);
-        printf("  Umidade:     Min=%.1f %%, Max=%.1f %%\n", umid_min_global, umid_max_global);
-        printf("  Pressao:     Min=%.1f hPa, Max=%.1f hPa\n", pres_min_global, pres_max_global);
-        printf("Calibracao (Offsets):\n");
-        printf("  Temperatura: %.1f C\n", temp_offset_global);
-        printf("  Umidade:     %.1f %%\n", umid_offset_global);
-        printf("  Pressao:     %.1f hPa\n", pres_offset_global);
-        printf("----------------------------------\n\n");
-
         char http_response[] = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
         tcp_write(tpcb, http_response, sizeof(http_response) - 1, TCP_WRITE_FLAG_COPY);
     }
     else
     {
-        printf("Erro ao salvar configuracoes: falha na analise do JSON ou timeout do mutex.\n");
+        //caso não consiga ler os dados do json
         char http_response[] = "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n";
         tcp_write(tpcb, http_response, sizeof(http_response) - 1, TCP_WRITE_FLAG_COPY);
     }
@@ -270,7 +254,7 @@ static err_t tcp_server_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, er
 
     return ERR_OK;
 }
-
+//  Procura as chaves correspondentes aos respectivos dados no json
 static int parse_json_value(const char *json, const char *key, float *value)
 {
     char search_key[64];

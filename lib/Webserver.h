@@ -26,6 +26,6 @@ static err_t tcp_server_accept(void *arg, struct tcp_pcb *newpcb, err_t err); //
 
 static err_t tcp_server_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err); // Função de callback para processar requisições HTTP
 
-void user_request(char **request, struct tcp_pcb *tpcb); // Tratamento do request do usuário
+void user_request(char *request, struct tcp_pcb *tpcb); // Tratamento do request do usuário
 
 #endif

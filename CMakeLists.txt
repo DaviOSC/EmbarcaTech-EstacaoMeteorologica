@@ -4,16 +4,14 @@ if(WIN32)
 else()
     set(USERHOME $ENV{HOME})
 endif()
-set(sdkVersion 2.1.0)
-set(toolchainVersion 13_3_Rel1)
-set(picotoolVersion 2.1.0)
+set(sdkVersion 2.1.1)
+set(toolchainVersion 14_2_Rel1)
+set(picotoolVersion 2.1.1)
 set(picoVscode ${USERHOME}/.pico-sdk/cmake/pico-vscode.cmake)
 if (EXISTS ${picoVscode})
     include(${picoVscode})
 endif()
 # ====================================================================================
-
-
 
 cmake_minimum_required(VERSION 3.13)
 set(CMAKE_C_STANDARD 11)
@@ -41,13 +39,13 @@ target_link_libraries(${PROJECT_NAME}
         hardware_i2c
         hardware_gpio
         hardware_pio
+        hardware_pwm
         pico_cyw43_arch_lwip_threadsafe_background
         FreeRTOS-Kernel
         FreeRTOS-Kernel-Heap4
         )
 
 pico_generate_pio_header(${PROJECT_NAME} ${CMAKE_CURRENT_LIST_DIR}/pio_matrix.pio)
-
 
 pico_enable_stdio_usb(${PROJECT_NAME} 1)
 pico_enable_stdio_uart(${PROJECT_NAME} 0)
